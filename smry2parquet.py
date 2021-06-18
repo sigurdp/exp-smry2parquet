@@ -1,8 +1,10 @@
 from typing import List, Dict
+import argparse
 from pathlib import Path
 import logging
 import logging.config
 import json
+import time
 
 import pandas as pd
 import pyarrow as pa
@@ -43,6 +45,22 @@ def _create_float_downcasting_schema(schema: pa.Schema) -> pa.Schema:
 
 
 # -------------------------------------------------------------------------
+def _set_metadata_per_field(schema: pa.Schema, smry_meta_dict: Dict[str, dict]) -> pa.Schema:
+    # Strangely there seems to be no way of directly getting the number of fields in
+    # the schema, nor a list of the fields
+    new_field_list: List[pa.Field] = []
+    field_count = len(schema.names)
+    for idx in range(0, field_count):
+        field = schema.field(idx)
+        if field.name in smry_meta_dict:
+            field = field.with_metadata({b"smry_meta": json.dumps(smry_meta_dict[field.name])})
+
+        new_field_list.append(field)
+
+    return pa.schema(new_field_list)
+
+
+# -------------------------------------------------------------------------
 def _create_smry_meta_dict(eclsum: EclSum, column_names: List[str]) -> Dict[str, dict]:
     """ Builds dictionary containing metadata for all the specified columns
     """
@@ -67,11 +85,12 @@ def _create_smry_meta_dict(eclsum: EclSum, column_names: List[str]) -> Dict[str,
 
 
 # -------------------------------------------------------------------------
-def load_smry_into_table(smry_filename: str) -> pa.Table:
+def _load_smry_into_table(smry_filename: str) -> pa.Table:
 
     eclsum = EclSum(smry_filename, lazy_load=False)
 
     # EclSum.pandas_frame() crashes if the SMRY data has timestamps beyond 2262
+    # See: https://github.com/equinor/ecl/issues/802
     df: pd.DataFrame = eclsum.pandas_frame()
 
     # This could be a possible work-around to the crash above, but both numerical and 
@@ -79,9 +98,9 @@ def load_smry_into_table(smry_filename: str) -> pa.Table:
     #ecldates = eclsum.dates
     #df: pd.DataFrame = eclsum.pandas_frame(time_index=ecldates)
 
-    print(df.shape)
-    print(df.head())
-    print(df.tail())
+    logger.debug("DataFrame shape: %s", df.shape)
+    logger.debug("DataFrame head():\n%s", df.head())
+    logger.debug("DataFrame tail():\n%s", df.tail())
 
     df.index.rename("DATE", inplace=True)
     df.reset_index(inplace=True)
@@ -94,11 +113,16 @@ def load_smry_into_table(smry_filename: str) -> pa.Table:
     # In the meantime we try and downcast the double columns to float32 
     schema = _create_float_downcasting_schema(schema)
 
-    table: pa.Table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
-
     column_names = schema.names
     column_names.remove("DATE")
     smry_meta_dict = _create_smry_meta_dict(eclsum, column_names)
+
+    schema = _set_metadata_per_field(schema, smry_meta_dict)
+
+    table: pa.Table = pa.Table.from_pandas(df, schema=schema, preserve_index=False)
+
+    # Wipe out any Pandas related metadata from the schema
+    #table = table.replace_schema_metadata(None)
 
     # Write the smry metadata to the schema.
     # Will completely replace any existing metadata in the table.
@@ -115,28 +139,52 @@ def load_smry_into_table(smry_filename: str) -> pa.Table:
 
 
 # -------------------------------------------------------------------------
+def smry2parquet(smry_filename: str, parquet_filename: str, write_extra_feather: bool) -> pa.Table:
+    lap_s = time.perf_counter()
+    logger.debug(f"Reading input SMRY data from: {smry_filename}")
+    table: pa.Table = _load_smry_into_table(smry_filename)
+    logger.debug(f"Reading input took {(time.perf_counter() - lap_s):.2f}s")
+
+    lap_s = time.perf_counter()
+    logger.debug(f"Writing parquet file to: {parquet_filename}")
+    pa.parquet.write_table(table, parquet_filename)
+    pa.parquet.write_table(table, parquet_filename, version="2.0", compression="ZSTD")
+    logger.debug(f"Parquet write took {(time.perf_counter() - lap_s):.2f}s")
+
+    # For testing/comparison purposes, we can also write to feather/arrow
+    if write_extra_feather:
+        lap_s = time.perf_counter()
+        arrow_filename = Path(parquet_filename).with_suffix(".arrow")
+        logger.debug(f"Writing arrow/feather file to: {arrow_filename}")
+        pa.feather.write_feather(table, dest=arrow_filename)
+        #pa.feather.write_feather(table, dest=arrow_filename, compression="zstd")
+        logger.debug(f"Arrow/feather write took {(time.perf_counter() - lap_s):.2f}s")
+
+
+# -------------------------------------------------------------------------
 if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
-    print("Starting...")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("smry_file", help="Input UNSMRY file to convert")
+    parser.add_argument("output", help="Output Parquet file name")
 
-    output_dir = Path("./output")
-    output_dir.mkdir(exist_ok=True)
+    args = parser.parse_args()
+
+    smry_filename = args.smry_file
+    parquet_filename = args.output
 
     #smry_filename = "../webviz-subsurface-testdata/reek_history_match/realization-0/iter-0/eclipse/model/5_R001_REEK-0.UNSMRY"
-    smry_filename = "../../webviz_testdata/reek_history_match_large/realization-2/iter-0/eclipse/model/R001_REEK-2.UNSMRY"
+    #smry_filename = "../../webviz_testdata/reek_history_match_large/realization-2/iter-0/eclipse/model/R001_REEK-2.UNSMRY"
     #smry_filename = "./testdata/DROGON-0.UNSMRY"
 
-    parquet_filename = str(output_dir / "summary.parquet")
-    arrow_filename = str(output_dir / "summary.arrow")
+    start_s = time.perf_counter()
+    logger.info(f"Converting SMRY to Parquet: smry={smry_filename}  parquet={parquet_filename}")
 
-    table: pa.Table = load_smry_into_table(smry_filename)
+    smry2parquet(smry_filename, parquet_filename, write_extra_feather=True)
 
-    pa.parquet.write_table(table, parquet_filename)
-    #pa.parquet.write_table(table, parquet_filename, version="2.0", compression="ZSTD")
-
-    pa.feather.write_feather(table, dest=arrow_filename)
-    #pa.feather.write_feather(table, dest=arrow_filename, compression="zstd")
+    logger.info(f"Conversion finished in {(time.perf_counter() - start_s):.2f}s")
 
 
