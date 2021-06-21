@@ -52,8 +52,9 @@ def _load_smry_into_table(smry_filename: str) -> pa.Table:
 
     # Unclear what the difference between these two is, but it seems that
     # EclSum.pandas_frame() internally uses EclSumKeyWordVector
-    column_names = EclSumKeyWordVector(eclsum, add_keywords = True)
-    #column_names = eclsum.keys()
+    # For now, use EclSum.keys() since we have been seeing duplicates when using EclSumKeyWordVector
+    #column_names = EclSumKeyWordVector(eclsum, add_keywords = True)
+    column_names = eclsum.keys()
 
     # Fetch the dates as a numpy array with ms resolution
     np_dates_ms = eclsum.numpy_dates
