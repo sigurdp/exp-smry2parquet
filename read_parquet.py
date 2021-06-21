@@ -9,6 +9,10 @@ import pyarrow.feather
 
 INPUT_FILENAME = "output/summary.parquet"
 
+print("")
+print(f"INPUT_FILENAME: {INPUT_FILENAME}")
+print("")
+
 if Path(INPUT_FILENAME).suffix == ".parquet":
     print("===================================")
     print("QUERIES AGAINST PARQUET FILE")
@@ -24,7 +28,7 @@ if Path(INPUT_FILENAME).suffix == ".parquet":
 if Path(INPUT_FILENAME).suffix == ".parquet":
     table = pa.parquet.read_table(INPUT_FILENAME)
 else:
-    table = pa.feather.read_table("INPUT_FILENAME")
+    table = pa.feather.read_table(INPUT_FILENAME)
 
 
 # Just select a few columns for debugging
@@ -47,13 +51,13 @@ arrow_date = table["DATE"][0]
 print("\narrow_date:", type(arrow_date), arrow_date.type, arrow_date)
 
 
-schema_smry_meta = json.loads(table.schema.metadata[b"smry_meta"])
+#schema_smry_meta = json.loads(table.schema.metadata[b"smry_meta"])
 col_name = "FOPR"
-print(f"schema metadata for {col_name}: {schema_smry_meta[col_name]}")
+#print(f"schema metadata for {col_name}: {schema_smry_meta[col_name]}")
 print(f" field metadata for {col_name}: {json.loads(table.field(col_name).metadata[b'smry_meta'])}")
 
 col_name = table.schema.names[-1]
-print(f"schema metadata for {col_name}: {schema_smry_meta[col_name]}")
+#print(f"schema metadata for {col_name}: {schema_smry_meta[col_name]}")
 print(f" field metadata for {col_name}: {json.loads(table.field(col_name).metadata[b'smry_meta'])}")
 
 
