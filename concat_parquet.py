@@ -6,6 +6,8 @@ from pathlib import Path
 from dataclasses import dataclass
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 import pyarrow as pa
 import pyarrow.feather
@@ -47,24 +49,44 @@ for path in globbedpaths:
 
 files_to_process = sorted(files_to_process, key=lambda e: e.real)
 
-
 LOGGER.info("Doing CONCATENATION")
 start_s = time.perf_counter()
 
 
-lap_s = time.perf_counter()
-table_list = []
-for entry in files_to_process:
+def read_and_build_table_for_one_real(entry: FileEntry) -> pa.Table:
     LOGGER.info(f"real={entry.real}: {entry.filename}")
-    table = pa.parquet.read_table(entry.filename)
-    #table = pa.feather.read_table(entry.filename)
+
+    if Path(entry.filename).suffix == ".parquet":
+        table = pa.parquet.read_table(entry.filename)
+    else:
+        table = pa.feather.read_table(entry.filename)
 
     #table = table.select(["DATE", "FOPR", "TCPU", "BWIP:28,20,13"])
 
     table = table.add_column(1, "REAL", pa.array(np.full(table.num_rows, entry.real)))
     LOGGER.info(f"table shape: {table.shape}")
 
+    return table
+
+
+lap_s = time.perf_counter()
+
+table_list = []
+
+for entry in files_to_process:
+    table = read_and_build_table_for_one_real(entry)
     table_list.append(table)
+
+"""
+#with ProcessPoolExecutor() as executor:
+with ThreadPoolExecutor() as executor:
+    futures = executor.map(read_and_build_table_for_one_real, files_to_process)
+for f in futures:
+    table_list.append(f)
+"""
+
+
+
 
 LOGGER.info(f"All input files read into memory in {(time.perf_counter() - lap_s):.2f}s")
 
