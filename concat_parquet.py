@@ -73,9 +73,11 @@ lap_s = time.perf_counter()
 
 table_list = []
 
+
 for entry in files_to_process:
     table = read_and_build_table_for_one_real(entry)
     table_list.append(table)
+
 
 """
 #with ProcessPoolExecutor() as executor:
@@ -85,14 +87,18 @@ for f in futures:
     table_list.append(f)
 """
 
-
-
-
 LOGGER.info(f"All input files read into memory in {(time.perf_counter() - lap_s):.2f}s")
 
 
-lap_s = time.perf_counter()
+unique_column_names = set()
+for table in table_list:
+    unique_column_names.update(table.schema.names)
+LOGGER.info(f"number of unique column names: {len(unique_column_names)}")
+
+
 LOGGER.info(f"number of tables to concatenate: {len(table_list)}")
+
+lap_s = time.perf_counter()
 
 # Need to investigate this further
 # The default promote=False requires all schemas to be the same

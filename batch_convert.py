@@ -60,9 +60,11 @@ start_s = time.perf_counter()
 for entry in files_to_process:
     process_one_file(entry)
 
+"""
 # Experiment with multiple processes
 # Significant speedups to be had here for multiple cores!!
-# with Pool() as pool:
-#     pool.map(process_one_file, files_to_process)
+with Pool() as pool:
+    pool.map(process_one_file, files_to_process)
+"""
 
 LOGGER.info(f"Conversion finished in {(time.perf_counter() - start_s):.2f}s")
