@@ -12,6 +12,7 @@ from concurrent.futures import ProcessPoolExecutor
 import pyarrow as pa
 import pyarrow.feather
 import pyarrow.parquet
+import pyarrow.dataset
 import numpy as np
 
 
@@ -49,6 +50,9 @@ for path in globbedpaths:
 
 files_to_process = sorted(files_to_process, key=lambda e: e.real)
 
+# Limit number of files to process
+#files_to_process = files_to_process[1:10]
+
 LOGGER.info("Doing CONCATENATION")
 start_s = time.perf_counter()
 
@@ -56,15 +60,21 @@ start_s = time.perf_counter()
 def read_and_build_table_for_one_real(entry: FileEntry) -> pa.Table:
     LOGGER.info(f"real={entry.real}: {entry.filename}")
 
+    start_read_s = time.perf_counter()
     if Path(entry.filename).suffix == ".parquet":
         table = pa.parquet.read_table(entry.filename)
+        #table = pa.parquet.read_table(entry.filename, memory_map=True)
+        #table = pa.dataset.dataset(entry.filename, format="parquet").to_table()
     else:
         table = pa.feather.read_table(entry.filename)
+
+    et_read_s = time.perf_counter() - start_read_s
 
     #table = table.select(["DATE", "FOPR", "TCPU", "BWIP:28,20,13"])
 
     table = table.add_column(1, "REAL", pa.array(np.full(table.num_rows, entry.real)))
-    LOGGER.info(f"table shape: {table.shape}")
+
+    LOGGER.info(f"read time: {et_read_s:.2f}s   table shape: {table.shape}")
 
     return table
 
@@ -120,6 +130,13 @@ output_feather_filename = str(output_dir / "concat.arrow")
 LOGGER.info(f"Writing feather output to: {output_feather_filename}")
 pa.feather.write_feather(combined_table, dest=output_feather_filename)
 LOGGER.info(f"Writing feather took {(time.perf_counter() - lap_s):.2f}s")
+
+# combined_table_with_combined_chunks = combined_table.combine_chunks()
+# output_feather_filename = str(output_dir / "concat_with_combined_chunks.arrow")
+# LOGGER.info(f"Writing feather output to: {output_feather_filename}")
+# pa.feather.write_feather(combined_table_with_combined_chunks, dest=output_feather_filename)
+# LOGGER.info(f"Writing feather took {(time.perf_counter() - lap_s):.2f}s")
+
 
 LOGGER.info(f"DONE! total time was {(time.perf_counter() - start_s):.2f}s")
 

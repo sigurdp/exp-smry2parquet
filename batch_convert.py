@@ -45,6 +45,8 @@ for path in globbedpaths:
 
 files_to_process = sorted(files_to_process, key=lambda e: e.real)
 
+# Limit number of files to process
+#files_to_process = files_to_process[1:10]
 
 
 def process_one_file(entry: FileEntry):

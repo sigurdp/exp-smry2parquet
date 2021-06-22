@@ -25,6 +25,17 @@ if Path(INPUT_FILENAME).suffix == ".parquet":
     print(parquet_file.metadata)
 
 
+if Path(INPUT_FILENAME).suffix == ".arrow":
+    print("===================================")
+    print("QUERIES AGAINST ARROW FILE")
+    print("===================================")
+
+    source = pa.memory_map(INPUT_FILENAME, "r")
+    reader = pyarrow.ipc.RecordBatchFileReader(source)
+    print(f"reader.num_record_batches={reader.num_record_batches}")
+    print(f"reader.stats={reader.stats}")
+
+
 if Path(INPUT_FILENAME).suffix == ".parquet":
     table = pa.parquet.read_table(INPUT_FILENAME)
 else:
