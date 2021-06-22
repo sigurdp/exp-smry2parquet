@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Iterable, Set
 import argparse
 from pathlib import Path
 import logging
@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 # -------------------------------------------------------------------------
-def _create_smry_meta_dict(eclsum: EclSum, column_names: List[str]) -> Dict[str, dict]:
+def _create_smry_meta_dict(eclsum: EclSum, column_names: Iterable[str]) -> Dict[str, dict]:
     """ Builds dictionary containing metadata for all the specified columns
     """
     smry_meta = {}
@@ -52,9 +52,10 @@ def _load_smry_into_table(smry_filename: str) -> pa.Table:
 
     # Unclear what the difference between these two is, but it seems that
     # EclSum.pandas_frame() internally uses EclSumKeyWordVector
-    # For now, use EclSum.keys() since we have been seeing duplicates when using EclSumKeyWordVector
-    #column_names = EclSumKeyWordVector(eclsum, add_keywords = True)
-    column_names = eclsum.keys()
+    # For now, we go via a set to prune out duplicate entries being returned by EclSumKeyWordVector,
+    # see: https://github.com/equinor/ecl/issues/816#issuecomment-865881283
+    column_names: Set[str] = set(EclSumKeyWordVector(eclsum, add_keywords = True))
+    #column_names = eclsum.keys()
 
     # Fetch the dates as a numpy array with ms resolution
     np_dates_ms = eclsum.numpy_dates
