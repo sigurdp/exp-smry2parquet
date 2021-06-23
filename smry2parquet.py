@@ -48,7 +48,7 @@ def _load_smry_into_table(smry_filename: str) -> pa.Table:
     'smry_meta' key
     """
 
-    eclsum = EclSum(smry_filename, lazy_load=False)
+    eclsum = EclSum(smry_filename, include_restart=False, lazy_load=False)
 
     # Unclear what the difference between these two is, but it seems that
     # EclSum.pandas_frame() internally uses EclSumKeyWordVector
